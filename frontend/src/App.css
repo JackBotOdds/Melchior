@@ -1,0 +1,74 @@
+.app-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem;
+  font-family: sans-serif;
+}
+
+.app-header {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.app-header h1 {
+  font-size: 2.5rem;
+  color: #2c3e50;
+  margin-bottom: 0.5rem;
+}
+
+.app-header p {
+  font-size: 1rem;
+  color: #7f8c8d;
+}
+
+.predictions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+}
+
+/* Styles for MatchPredictionCard can be improved in its own CSS file */
+/* This is just a basic styling for the card container */
+.prediction-card {
+  background-color: #ffffff;
+  border: 1px solid #ecf0f1;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  padding: 1.5rem;
+  transition: all 0.2s ease-in-out;
+}
+
+.prediction-card.clickable {
+  cursor: pointer;
+}
+
+.prediction-card.clickable:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15);
+}
+
+.prediction-card.expanded {
+  border-color: #3498db;
+  box-shadow: 0 8px 12px rgba(52, 152, 219, 0.2);
+}
+
+
+.prediction-card h2 {
+  font-size: 1.5rem;
+  margin-bottom: 1rem;
+  color: #34495e;
+}
+
+.prediction-card .loading,
+.prediction-card .error {
+  color: #95a5a6;
+}
+
+.prediction-card .content p {
+  margin: 0.5rem 0;
+  color: #34495e;
+}
+
+.prediction-card .content strong {
+  color: #2c3e50;
+}
