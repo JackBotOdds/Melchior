@@ -185,5 +185,5 @@ Distribuído sob a licença MIT. Veja `LICENSE` para mais informações.
 ---
 
 <p align="center">
-  Feito com ❤️ por Felipe Macedo
+  Feito com ❤️ por Francisco Macedo
 </p>
