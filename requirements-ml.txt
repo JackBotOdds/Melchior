@@ -32,6 +32,7 @@ onnxruntime>=1.17.0
 fastapi>=0.110.0
 uvicorn[standard]>=0.27.0
 scipy>=1.12.0
+python-dotenv>=1.0.0
 
 # Testes da API
 httpx>=0.27.0

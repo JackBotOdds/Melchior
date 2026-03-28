@@ -4,6 +4,11 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
+# Carrega variáveis do .env se existir
+if [ -f ".env" ]; then
+    set -a && source .env && set +a
+fi
+
 PYTHON="${PYTHON:-python}"
 PORT="${DELFOS_PORT:-8000}"
 HOST="${DELFOS_HOST:-0.0.0.0}"

@@ -12,11 +12,16 @@ Variáveis de ambiente:
 import logging
 import os
 from contextlib import asynccontextmanager
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from delfos.api.routers import health, predictions
+from delfos.api.routers import betsapi, health, predictions
 from delfos.api.services.feature_store import FeatureStore
 from delfos.api.services.model_registry import ModelRegistry
 
@@ -55,3 +60,4 @@ app.add_middleware(
 
 app.include_router(health.router)
 app.include_router(predictions.router, prefix="/v1/predict")
+app.include_router(betsapi.router,     prefix="/v1/predict/betsapi")
