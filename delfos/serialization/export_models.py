@@ -93,11 +93,28 @@ def _convert_to_onnx(model, registry_name: str) -> bytes:
     n_features = model.n_features_in_
     initial_type = [("float_input", FloatTensorType([None, n_features]))]
 
-    onnx_model = convert_sklearn(
-        model,
-        initial_types=initial_type,
-        target_opset={"": 17, "ai.onnx.ml": 3},
-    )
+    # onnxmltools exige que os nomes de feature sigam o padrão f0, f1, f2...
+    # para XGBClassifier. Modificamos o booster temporariamente e restauramos.
+    _orig_booster_names = None
+    try:
+        from xgboost import XGBClassifier as _XGBClassifier
+        if isinstance(model, _XGBClassifier):
+            booster = model.get_booster()
+            _orig_booster_names = booster.feature_names
+            booster.feature_names = [f"f{i}" for i in range(n_features)]
+    except (ImportError, Exception):
+        pass
+
+    try:
+        onnx_model = convert_sklearn(
+            model,
+            initial_types=initial_type,
+            target_opset={"": 17, "ai.onnx.ml": 3},
+        )
+    finally:
+        if _orig_booster_names is not None:
+            model.get_booster().feature_names = _orig_booster_names
+
     print(f"  [onnx] {registry_name}  n_features={n_features}")
     return onnx_model.SerializeToString()
 
