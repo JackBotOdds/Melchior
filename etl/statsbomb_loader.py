@@ -82,17 +82,25 @@ def _outcome_row(mid, mrow, ev, context, comp_type):
     shots_ht = shots[shots["period"] == 1]
     h_ht     = shots_ht[shots_ht["team"] == home]
     a_ht     = shots_ht[shots_ht["team"] == away]
+    h_ft     = shots[shots["team"] == home]          # jogo completo
+    a_ft     = shots[shots["team"] == away]          # jogo completo
 
     ht_shots_h = len(h_ht);   ht_shots_a = len(a_ht)
+    ft_shots_h = len(h_ft);   ft_shots_a = len(a_ft)
     ht_sog_h   = int(h_ht["shot_outcome"].isin(SOG_OUTCOMES).sum())
     ht_sog_a   = int(a_ht["shot_outcome"].isin(SOG_OUTCOMES).sum())
+    ft_sog_h   = int(h_ft["shot_outcome"].isin(SOG_OUTCOMES).sum())
+    ft_sog_a   = int(a_ft["shot_outcome"].isin(SOG_OUTCOMES).sum())
     ht_goals_h = int((h_ht["shot_outcome"] == "Goal").sum())
     ht_goals_a = int((a_ht["shot_outcome"] == "Goal").sum())
     total_goals = int((shots["shot_outcome"] == "Goal").sum())
 
     fouls_ht   = ev[(ev["type"] == "Foul Committed") & (ev["period"] == 1)]
+    fouls_ft   = ev[ev["type"] == "Foul Committed"]
     ht_fouls_h = int((fouls_ht["team"] == home).sum())
     ht_fouls_a = int((fouls_ht["team"] == away).sum())
+    ft_fouls_h = int((fouls_ft["team"] == home).sum())
+    ft_fouls_a = int((fouls_ft["team"] == away).sum())
 
     corners     = ev[(ev["type"] == "Pass") & (ev.get("pass_type", pd.Series(dtype=str)).eq("Corner")
                                                 if "pass_type" in ev.columns
@@ -100,11 +108,15 @@ def _outcome_row(mid, mrow, ev, context, comp_type):
     corners_ht  = corners[corners["period"] == 1]
     ht_corn_h   = int((corners_ht["team"] == home).sum())
     ht_corn_a   = int((corners_ht["team"] == away).sum())
+    ft_corn_h   = int((corners["team"] == home).sum())   # jogo completo
+    ft_corn_a   = int((corners["team"] == away).sum())   # jogo completo
     total_corn  = len(corners)
 
     cards = _cards_df(ev)
     ht_yel_h = int(((cards["period"]==1)&(cards["team"]==home)&(cards["card"].isin(YELLOW_CARDS))).sum())
     ht_yel_a = int(((cards["period"]==1)&(cards["team"]==away)&(cards["card"].isin(YELLOW_CARDS))).sum())
+    ft_yel_h = int(((cards["team"]==home)&(cards["card"].isin(YELLOW_CARDS))).sum())
+    ft_yel_a = int(((cards["team"]==away)&(cards["card"].isin(YELLOW_CARDS))).sum())
     total_yel = int(cards["card"].isin(YELLOW_CARDS).sum())
     total_red = int(cards["card"].isin(RED_CARDS).sum())
 
@@ -116,12 +128,20 @@ def _outcome_row(mid, mrow, ev, context, comp_type):
         "ht_goals_diff": ht_goals_h - ht_goals_a,
         "ht_shots_home": ht_shots_h,   "ht_shots_away": ht_shots_a,
         "ht_shots_diff": ht_shots_h - ht_shots_a,
+        "ft_shots_home": ft_shots_h,   "ft_shots_away": ft_shots_a,
+        "ft_shots_diff": ft_shots_h - ft_shots_a,
         "ht_sog_home": ht_sog_h,       "ht_sog_away": ht_sog_a,
         "ht_sog_diff": ht_sog_h - ht_sog_a,
+        "ft_sog_home": ft_sog_h,       "ft_sog_away": ft_sog_a,
+        "ft_sog_diff": ft_sog_h - ft_sog_a,
         "ht_fouls_home": ht_fouls_h,   "ht_fouls_away": ht_fouls_a,
         "ht_fouls_diff": ht_fouls_h - ht_fouls_a,
+        "ft_fouls_home": ft_fouls_h,   "ft_fouls_away": ft_fouls_a,
+        "ft_fouls_diff": ft_fouls_h - ft_fouls_a,
         "ht_corners_home": ht_corn_h,  "ht_corners_away": ht_corn_a,
+        "ft_corners_home": ft_corn_h,  "ft_corners_away": ft_corn_a,
         "ht_yellow_cards_home": ht_yel_h, "ht_yellow_cards_away": ht_yel_a,
+        "ft_yellow_cards_home": ft_yel_h, "ft_yellow_cards_away": ft_yel_a,
         "total_goals": total_goals, "total_corners": total_corn,
         "total_yellow_cards": total_yel, "total_red_cards": total_red,
         "source_context": context, "competition_type": comp_type,
@@ -135,6 +155,8 @@ def _sog_row(mid, mrow, ev, context, comp_type):
     shots_ht = shots[shots["period"] == 1]
     h_ht = shots_ht[shots_ht["team"] == home]
     a_ht = shots_ht[shots_ht["team"] == away]
+    h_ft = shots[shots["team"] == home]    # jogo completo
+    a_ft = shots[shots["team"] == away]    # jogo completo
     total_goals     = hs + as_
     goals_home_frac = (hs / total_goals) if total_goals > 0 else 0.5
     return {
@@ -144,6 +166,9 @@ def _sog_row(mid, mrow, ev, context, comp_type):
         "ht_sog_away": int(a_ht["shot_outcome"].isin(SOG_OUTCOMES).sum()),
         "ht_goals_home": int((h_ht["shot_outcome"] == "Goal").sum()),
         "ht_goals_away": int((a_ht["shot_outcome"] == "Goal").sum()),
+        "ft_shots_home": len(h_ft),   "ft_shots_away": len(a_ft),
+        "ft_sog_home": int(h_ft["shot_outcome"].isin(SOG_OUTCOMES).sum()),
+        "ft_sog_away": int(a_ft["shot_outcome"].isin(SOG_OUTCOMES).sum()),
         "total_goals": total_goals, "goals_home_frac": goals_home_frac,
         "source_context": context, "competition_type": comp_type,
     }
