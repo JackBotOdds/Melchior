@@ -12,7 +12,7 @@ from typing import Optional
 
 import onnxruntime as rt
 
-ROOT_DIR   = Path(__file__).resolve().parents[4]
+ROOT_DIR   = Path(__file__).resolve().parents[3]
 ONNX_DIR   = ROOT_DIR / "models" / "onnx"
 MANIFEST   = ONNX_DIR / "model_manifest.json"
 

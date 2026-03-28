@@ -25,8 +25,23 @@ from pathlib import Path
 import mlflow
 import mlflow.sklearn
 import numpy as np
-from skl2onnx import convert_sklearn
+from skl2onnx import convert_sklearn, update_registered_converter
 from skl2onnx.common.data_types import FloatTensorType
+from skl2onnx.common.shape_calculator import calculate_linear_classifier_output_shapes
+
+# Registra conversor XGBoost → ONNX (depende de onnxmltools)
+try:
+    from xgboost import XGBClassifier as _XGBClassifier
+    from onnxmltools.convert.xgboost.operator_converters.XGBoost import convert_xgboost as _cvt_xgb
+    update_registered_converter(
+        _XGBClassifier,
+        "XGBoostXGBClassifier",
+        calculate_linear_classifier_output_shapes,
+        _cvt_xgb,
+        options={"nocl": [True, False], "zipmap": [True, False, "columns"]},
+    )
+except ImportError:
+    pass  # onnxmltools ausente; instale via requirements-ml.txt
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 

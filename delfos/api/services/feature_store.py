@@ -15,7 +15,7 @@ from typing import Optional
 
 import pandas as pd
 
-ROOT_DIR      = Path(__file__).resolve().parents[4]
+ROOT_DIR      = Path(__file__).resolve().parents[3]
 PROCESSED_DIR = ROOT_DIR / "data" / "processed"
 
 logger = logging.getLogger(__name__)
