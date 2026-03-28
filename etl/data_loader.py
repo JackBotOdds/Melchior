@@ -2,29 +2,34 @@ import pandas as pd
 from pathlib import Path
 
 GRANULARITIES = ["team_outcome", "team_sog", "player_sog"]
-CONTEXTS = ["wc2022", "ligue1_2021_2022"]
 
 def load_all(raw_dir: Path) -> dict[str, pd.DataFrame]:
     """
-    Lê os arquivos CSV das granularidades e contextos especificados,
-    adiciona metadados de rastreabilidade e retorna os DataFrames combinados.
+    Descobre automaticamente todos os CSVs em raw_dir que correspondam
+    ao padrao *_{granularidade}.csv e combina em um DataFrame por granularidade.
+    Compativel tanto com CSVs nomeados por competicao (gerados pelo statsbomb_loader)
+    quanto com os nomes legados (wc2022_*, ligue1_*).
     """
-    results = {}
+    raw_dir = Path(raw_dir)
+    result  = {}
 
-    for granularity in GRANULARITIES:
-        dataframes = []
-        for context in CONTEXTS:
-            file_path = raw_dir / f"{context}_{granularity}.csv"
-            
-            # Leitura do CSV
-            df = pd.read_csv(file_path)
-            
-            # Adição da coluna de rastreabilidade
-            df["source_context"] = context
-            
-            dataframes.append(df)
-        
-        # Consolidação dos contextos para a granularidade atual
-        results[granularity] = pd.concat(dataframes, ignore_index=True)
-        
-    return results
+    for gran in GRANULARITIES:
+        csv_files = sorted(raw_dir.glob(f"*_{gran}.csv"))
+
+        if not csv_files:
+            raise FileNotFoundError(
+                f"Nenhum arquivo CSV encontrado em '{raw_dir}' para '{gran}'.\n"
+                "Execute primeiro: python -m etl.statsbomb_loader"
+            )
+
+        frames = []
+        for path in csv_files:
+            df  = pd.read_csv(path)
+            ctx = path.stem[: -len(f"_{gran}")]   # extrai contexto do nome do arquivo
+            if "source_context" not in df.columns:
+                df["source_context"] = ctx
+            frames.append(df)
+
+        result[gran] = pd.concat(frames, ignore_index=True)
+
+    return result
