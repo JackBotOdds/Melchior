@@ -11,10 +11,13 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,prometheus
   endpoint:
     health:
-      show-details: never
+      show-details: always
+      show-components: always
+
+management.health.circuitbreakers.enabled: true
 
 springdoc:
   swagger-ui:
@@ -25,6 +28,17 @@ springdoc:
 
 prediction:
   stub-model-version: "stub-v1.0"
+
+caspar:
+  base-url: ${CASPAR_BASE_URL:http://caspar:8000}
+  timeout-seconds: ${CASPAR_TIMEOUT:5}
+
+resilience4j.circuitbreaker.instances:
+  caspar:
+    slidingWindowSize: 5
+    failureRateThreshold: 60
+    waitDurationInOpenState: 30s
+    registerHealthIndicator: true
 
 cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}

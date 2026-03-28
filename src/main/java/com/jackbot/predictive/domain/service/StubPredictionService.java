@@ -7,7 +7,6 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 @Service
-@Profile("dev")   // nunca sobe em prod — CA-1.3.4
 public class StubPredictionService implements IPredictionService {
 
     @Value("${prediction.stub-model-version}")
