@@ -1,0 +1,179 @@
+{
+    "info": {
+        "_postman_id": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
+        "name": "JackBot Prediction Service",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+        "description": "API for JackBot Prediction Service, providing sports betting predictions. Currently uses stubbed data (Sprint 1)."
+    },
+    "item": [
+        {
+            "name": "Match Outcome Prediction",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "{{baseUrl}}/api/v1/predictions/match-outcome?matchId=match-2025-bra-arg-001",
+                    "host": [
+                        "{{baseUrl}}"
+                    ],
+                    "path": [
+                        "api",
+                        "v1",
+                        "predictions",
+                        "match-outcome"
+                    ],
+                    "query": [
+                        {
+                            "key": "matchId",
+                            "value": "match-2025-bra-arg-001"
+                        }
+                    ]
+                },
+                "description": "Returns probabilities for home win, draw, and away win for a given match."
+            },
+            "response": []
+        },
+        {
+            "name": "Team Shots On Goal Prediction",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "{{baseUrl}}/api/v1/predictions/team-sog?matchId=match-2025-bra-arg-001",
+                    "host": [
+                        "{{baseUrl}}"
+                    ],
+                    "path": [
+                        "api",
+                        "v1",
+                        "predictions",
+                        "team-sog"
+                    ],
+                    "query": [
+                        {
+                            "key": "matchId",
+                            "value": "match-2025-bra-arg-001"
+                        }
+                    ]
+                },
+                "description": "Estimates expected shots on goal for both home and away teams."
+            },
+            "response": []
+        },
+        {
+            "name": "Total Goals Prediction",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "{{baseUrl}}/api/v1/predictions/total-goals?matchId=match-2025-bra-arg-001",
+                    "host": [
+                        "{{baseUrl}}"
+                    ],
+                    "path": [
+                        "api",
+                        "v1",
+                        "predictions",
+                        "total-goals"
+                    ],
+                    "query": [
+                        {
+                            "key": "matchId",
+                            "value": "match-2025-bra-arg-001"
+                        }
+                    ]
+                },
+                "description": "Estimates expected goals (xG) and probabilities for over/under total goals."
+            },
+            "response": []
+        },
+        {
+            "name": "Both Teams To Score (BTTS) Prediction",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "{{baseUrl}}/api/v1/predictions/btts?matchId=match-2025-bra-arg-001",
+                    "host": [
+                        "{{baseUrl}}"
+                    ],
+                    "path": [
+                        "api",
+                        "v1",
+                        "predictions",
+                        "btts"
+                    ],
+                    "query": [
+                        {
+                            "key": "matchId",
+                            "value": "match-2025-bra-arg-001"
+                        }
+                    ]
+                },
+                "description": "Returns the probability of both teams scoring in the match."
+            },
+            "response": []
+        },
+        {
+            "name": "Corner Count Prediction",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "{{baseUrl}}/api/v1/predictions/corner-count?matchId=match-2025-bra-arg-001",
+                    "host": [
+                        "{{baseUrl}}"
+                    ],
+                    "path": [
+                        "api",
+                        "v1",
+                        "predictions",
+                        "corner-count"
+                    ],
+                    "query": [
+                        {
+                            "key": "matchId",
+                            "value": "match-2025-bra-arg-001"
+                        }
+                    ]
+                },
+                "description": "Estimates the total expected corners and over/under probabilities."
+            },
+            "response": []
+        },
+        {
+            "name": "Player Performance Prediction",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "{{baseUrl}}/api/v1/predictions/player-performance?matchId=match-2025-bra-arg-001",
+                    "host": [
+                        "{{baseUrl}}"
+                    ],
+                    "path": [
+                        "api",
+                        "v1",
+                        "predictions",
+                        "player-performance"
+                    ],
+                    "query": [
+                        {
+                            "key": "matchId",
+                            "value": "match-2025-bra-arg-001"
+                        }
+                    ]
+                },
+                "description": "Provides expected performance metrics for a player, including score probability, assist probability, and expected fantasy score."
+            },
+            "response": []
+        }
+    ],
+    "variable": [
+        {
+            "key": "baseUrl",
+            "value": "http://localhost:8080",
+            "type": "string"
+        }
+    ]
+}
