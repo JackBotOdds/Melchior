@@ -20,19 +20,41 @@ echo "=== Delfos API v1.0 ==="
 echo "[1/3] Verificando dependências..."
 $PYTHON -m pip install -r requirements-ml.txt --quiet
 
-# Verifica artefatos ONNX
+# Verifica artefatos ONNX — exporta automaticamente se modelos já foram treinados
 echo "[2/3] Verificando artefatos ONNX..."
 MANIFEST="models/onnx/model_manifest.json"
 
+_models_trained() {
+    $PYTHON -c "
+import sys
+try:
+    import mlflow
+    mlflow.set_tracking_uri('sqlite:///mlflow.db')
+    client = mlflow.tracking.MlflowClient()
+    names = [m.name for m in client.search_registered_models()]
+    needed = {'match-outcome', 'total-goals', 'corners', 'yellow-cards', 'red-cards'}
+    found  = needed & set(names)
+    print(len(found))
+except Exception:
+    print(0)
+" 2>/dev/null || echo 0
+}
+
 if [ ! -f "$MANIFEST" ]; then
-    echo ""
-    echo "[AVISO] model_manifest.json não encontrado em models/onnx/"
-    echo "        Execute antes: python -m delfos.serialization.export_models"
-    echo ""
-    read -r -p "Continuar mesmo assim? (s/N) " resp
-    [[ "${resp,,}" == "s" ]] || { echo "Abortado."; exit 1; }
+    TRAINED=$(_models_trained)
+    if [ "$TRAINED" -gt 0 ] 2>/dev/null; then
+        echo "        Manifest ausente — $TRAINED modelo(s) encontrado(s) no MLflow. Exportando..."
+        $PYTHON -m delfos.serialization.export_models
+    else
+        echo ""
+        echo "[AVISO] Nenhum modelo treinado encontrado."
+        echo "        Execute primeiro: python run_pipeline.py"
+        echo ""
+        read -r -p "Continuar sem modelos? (s/N) " resp
+        [[ "${resp,,}" == "s" ]] || { echo "Abortado."; exit 1; }
+    fi
 else
-    MODEL_COUNT=$(python -c "import json; m=json.load(open('$MANIFEST')); print(len(m.get('models', {})))" 2>/dev/null || echo "?")
+    MODEL_COUNT=$($PYTHON -c "import json; m=json.load(open('$MANIFEST')); print(len(m.get('models', [])))" 2>/dev/null || echo "?")
     echo "        Manifest OK — $MODEL_COUNT modelo(s) registrado(s)"
 fi
 
