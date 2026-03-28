@@ -11,8 +11,9 @@
 7. [Resultados do Treinamento](#7-resultados-do-treinamento)
 8. [Gráficos Gerados e Suas Interpretações](#8-gráficos-gerados-e-suas-interpretações)
 9. [Serialização para ONNX](#9-serialização-para-onnx)
-10. [Como Executar](#10-como-executar)
-11. [Estrutura de Arquivos de Saída](#11-estrutura-de-arquivos-de-saída)
+10. [API de Inferência (US-4.4)](#10-api-de-inferência-us-44)
+11. [Como Executar](#11-como-executar)
+12. [Estrutura de Arquivos de Saída](#12-estrutura-de-arquivos-de-saída)
 
 ---
 
@@ -566,7 +567,95 @@ O manifest serve como contrato para a API (US-4.4), informando o número de feat
 
 ---
 
-## 10. Como Executar
+## 10. API de Inferência (US-4.4)
+
+### Estrutura
+
+```
+delfos/api/
+├── app.py                        ← FastAPI + CORS + lifespan (eager loading)
+├── routers/
+│   ├── health.py                 ← GET /health
+│   └── predictions.py           ← POST /v1/predict/*
+├── schemas/
+│   ├── request.py                ← PredictionRequest (match_id, season)
+│   └── response.py               ← MatchOutcomeResponse, TotalGoalsResponse, etc.
+└── services/
+    ├── model_registry.py         ← carrega ONNX + manifest na inicialização
+    ├── feature_store.py          ← lookup match_id → features nos parquets
+    └── inference.py              ← executa ONNX e formata resposta
+```
+
+### Endpoints
+
+| Método | Rota | Resposta | CA |
+|--------|------|----------|----|
+| GET | `/health` | `{status, model_version, models_loaded, store_ready}` | 4.4.1 |
+| POST | `/v1/predict/match-outcome` | probabilidades HOME/DRAW/AWAY | 4.4.2 |
+| POST | `/v1/predict/total-goals` | expected_goals + over/under 2.5 | 4.4.3 |
+| POST | `/v1/predict/corners` | expected_corners + over/under 9 | 4.4.4 |
+| POST | `/v1/predict/cards` | yellow + red cards + over/under 3 amarelos | 4.4.5 |
+
+### Request
+
+Todos os endpoints aceitam:
+```json
+{ "match_id": "3788741", "season": "2022" }
+```
+
+`match_id` deve ser o ID numérico StatsBomb (inteiro como string). `season` é aceito mas não utilizado no lookup (Sprint 1 — IDs StatsBomb são globalmente únicos).
+
+### Fluxo de inferência por endpoint
+
+```
+match_id (string)
+    │
+    ▼
+feature_store.get_team_outcome(match_id) ou get_team_sog(match_id)
+    │ → row com features já normalizadas (StandardScaler aplicado no ETL)
+    │ → competition_type como string ("World Cup", "Domestic League", "Continental")
+    ▼
+inference._build_input()
+    │ → pd.get_dummies(competition_type) → colunas binárias
+    │ → reindex com feature_names do modelo (ordem do treino)
+    │ → converte para float32 numpy array
+    ▼
+onnxruntime.InferenceSession.run()
+    │ → match_outcome: [labels, ZipMap({0: p_home, 1: p_draw, 2: p_away})]
+    │ → regressores:   [float array]
+    ▼
+Derivações na resposta:
+    │ → over/under: scipy.stats.poisson.cdf(threshold, lambda=expected)
+    │ → most_likely_range: "0-1" | "2-3" | "4+" baseado em expected_goals
+    │ → confidence_score: max(probs) para classificador, max(over,under) para regressores
+    ▼
+Response Pydantic validado e retornado
+```
+
+### Tratamento de erros
+
+| Cenário | HTTP |
+|---------|------|
+| `match_id` não numérico | 400 |
+| `match_id` não encontrado nos parquets | 404 |
+| Campo obrigatório ausente no body | 422 |
+| Modelo ONNX não carregado | 503 |
+
+### Nota sobre o scaler nos arquivos ONNX
+
+O `StandardScaler` é aplicado no ETL (`preprocessor.py`) antes de salvar os parquets. Os modelos foram treinados com dados já normalizados e os arquivos ONNX esperam entrada pré-normalizada. Como o `feature_store` carrega features diretamente dos parquets normalizados, nenhuma transformação adicional é necessária em runtime.
+
+Na integração com a BetsAPI (sprint futura com dados ao vivo), o scaler deverá ser incluído no pipeline ONNX via `sklearn.pipeline.Pipeline([('scaler', scaler), ('model', model)])`, permitindo que a API receba features brutas.
+
+### Contrato com o Melchior (US-4.5)
+
+O Melchior (Java/Spring Boot) consome esta API via `DelfosHttpClient`. Ponto de atenção no contrato:
+
+> **Jackson serializa `matchId` como camelCase por padrão.** O Python espera `match_id` (snake_case). A Dupla 2 deve anotar o campo Java com `@JsonProperty("match_id")` ou configurar `spring.jackson.property-naming-strategy=SNAKE_CASE` no `application.yml`.
+
+---
+
+## 11. Como Executar
 
 ### Requisitos
 
@@ -622,15 +711,33 @@ python -m delfos.serialization.export_models
 mlflow ui --backend-store-uri sqlite:///mlflow.db
 ```
 
+### Iniciar a API de inferência
+
+```bash
+# Após o treinamento e exportação ONNX:
+uvicorn delfos.api.app:app --reload --port 8000
+
+# Verificar:
+curl http://localhost:8000/health
+
+# Testar predição:
+curl -X POST http://localhost:8000/v1/predict/match-outcome \
+  -H "Content-Type: application/json" \
+  -d '{"match_id": "3788741", "season": "2022"}'
+
+# Swagger UI:
+# http://localhost:8000/docs
+```
+
 ### Executar apenas os testes
 
 ```bash
-pytest tests/test_etl.py -v
+pytest tests/test_etl.py tests/test_api.py -v
 ```
 
 ---
 
-## 11. Estrutura de Arquivos de Saída
+## 12. Estrutura de Arquivos de Saída
 
 ```
 Melchior/
