@@ -4,17 +4,18 @@ export_models.py — Serialização dos modelos Delfos v1.0 para formato ONNX.
 Responsabilidades:
   - Carregar cada modelo do MLflow Model Registry (stage "None" → mais recente)
   - Converter para ONNX via skl2onnx usando n_features_in_ do modelo
+  - Incluir feature_names no manifest para que a API saiba a ordem esperada das colunas
   - Gerar model_manifest.json como contrato para a API (US-4.4)
 
-Correções aplicadas em relação ao spec US-4.3:
-  - Nomes no registry usam hífens (ex: "match-outcome"), igual ao US-4.2
-  - n_features inferido de model.n_features_in_ (dinâmico — respeita one-hot encoding)
-  - Pacote onnx adicionado ao requirements-ml.txt
+Nota sobre o scaler:
+  O StandardScaler é aplicado no ETL (preprocessor.py) antes de salvar os parquets.
+  Os modelos foram treinados com dados já normalizados. Portanto, os arquivos ONNX
+  esperam entrada pré-normalizada. A API carrega os features diretamente dos parquets
+  (que já estão normalizados), não sendo necessário incluir o scaler no ONNX.
+  Na integração com BetsAPI (sprint futura), o scaler deverá ser incluído no pipeline.
 
 Uso:
-  python -m serialization.export_models
-  ou
-  python delfos/serialization/export_models.py
+  python -m delfos.serialization.export_models
 """
 
 import json
@@ -27,18 +28,16 @@ import numpy as np
 from skl2onnx import convert_sklearn
 from skl2onnx.common.data_types import FloatTensorType
 
-# ---------------------------------------------------------------------------
-# Configuração
-# ---------------------------------------------------------------------------
-MLFLOW_URI = "http://localhost:5000"
+ROOT_DIR = Path(__file__).resolve().parents[2]
+
+# MLflow local (SQLite) — consistente com common.py
+MLFLOW_URI = f"sqlite:///{ROOT_DIR / 'mlflow.db'}"
 mlflow.set_tracking_uri(MLFLOW_URI)
 
-ONNX_DIR = Path(__file__).resolve().parents[2] / "models" / "onnx"
+ONNX_DIR = ROOT_DIR / "models" / "onnx"
 ONNX_DIR.mkdir(parents=True, exist_ok=True)
 
 # Mapeamento: nome no MLflow Registry → nome do arquivo .onnx
-# Chave: nome exato usado em mlflow.register_model() no common.py (com hífens)
-# Valor: prefixo do arquivo de saída (com underscores, para compatibilidade de paths)
 REGISTRY_TO_FILE = {
     "match-outcome":      "match_outcome",
     "total-goals":        "total_goals",
@@ -52,22 +51,14 @@ REGISTRY_TO_FILE = {
 VERSION = "1.0.0"
 
 
-# ---------------------------------------------------------------------------
-# Funções auxiliares
-# ---------------------------------------------------------------------------
-
 def _load_model_from_registry(registry_name: str):
-    """
-    Carrega o modelo sklearn mais recente do MLflow Model Registry.
-    Usa stage='None' (modelos recém-registrados em US-4.2, antes da promoção).
-    """
     client = mlflow.tracking.MlflowClient()
     versions = client.get_latest_versions(registry_name, stages=["None"])
 
     if not versions:
         raise RuntimeError(
             f"Nenhuma versão encontrada para '{registry_name}' no stage 'None'.\n"
-            "Execute os scripts de treinamento (US-4.2) antes de exportar."
+            "Execute os scripts de treinamento antes de exportar."
         )
 
     latest = versions[0]
@@ -78,15 +69,10 @@ def _load_model_from_registry(registry_name: str):
 
 
 def _convert_to_onnx(model, registry_name: str) -> bytes:
-    """
-    Converte o modelo sklearn para ONNX.
-    n_features é inferido de model.n_features_in_ para suportar
-    o número real de colunas após pd.get_dummies() em US-4.2.
-    """
     if not hasattr(model, "n_features_in_"):
         raise AttributeError(
-            f"Modelo '{registry_name}' não tem atributo n_features_in_. "
-            "Certifique-se de que o modelo foi ajustado (fit) antes de exportar."
+            f"Modelo '{registry_name}' não tem n_features_in_. "
+            "Certifique-se de que o modelo foi ajustado antes de exportar."
         )
 
     n_features = model.n_features_in_
@@ -102,44 +88,43 @@ def _convert_to_onnx(model, registry_name: str) -> bytes:
 
 
 def _collect_metrics(registry_name: str, run_id: str) -> dict:
-    """Lê as métricas do run MLflow para incluir no manifest."""
     client = mlflow.tracking.MlflowClient()
     run = client.get_run(run_id)
     return dict(run.data.metrics)
 
 
-# ---------------------------------------------------------------------------
-# Pipeline principal
-# ---------------------------------------------------------------------------
+def _get_feature_names(model) -> list:
+    """Extrai os nomes das features na ordem usada durante o treino."""
+    if hasattr(model, "feature_names_in_"):
+        return model.feature_names_in_.tolist()
+    return []
+
 
 def export_model(registry_name: str, file_prefix: str) -> dict:
-    """
-    Carrega, converte e salva um modelo como .onnx.
-    Retorna a entrada para o model_manifest.json.
-    """
     model, version_info = _load_model_from_registry(registry_name)
     onnx_bytes = _convert_to_onnx(model, registry_name)
 
     onnx_path = ONNX_DIR / f"{file_prefix}_v{VERSION}.onnx"
     onnx_path.write_bytes(onnx_bytes)
-    print(f"  [save] {onnx_path.relative_to(Path(__file__).parents[2])}")
+    print(f"  [save] {onnx_path.relative_to(ROOT_DIR)}")
 
     metrics = _collect_metrics(registry_name, version_info.run_id)
+    feature_names = _get_feature_names(model)
 
     return {
-        "name":          file_prefix,
-        "registry_name": registry_name,
-        "version":       VERSION,
-        "onnx_path":     str(onnx_path.relative_to(Path(__file__).parents[2])),
-        "n_features":    model.n_features_in_,
-        "mlflow_run_id": version_info.run_id,
-        "metrics":       metrics,
-        "generated_at":  datetime.now(timezone.utc).isoformat(),
+        "name":           file_prefix,
+        "registry_name":  registry_name,
+        "version":        VERSION,
+        "onnx_path":      str(onnx_path.relative_to(ROOT_DIR)).replace("\\", "/"),
+        "n_features":     model.n_features_in_,
+        "feature_names":  feature_names,
+        "mlflow_run_id":  version_info.run_id,
+        "metrics":        metrics,
+        "generated_at":   datetime.now(timezone.utc).isoformat(),
     }
 
 
 def build_manifest():
-    """Exporta todos os modelos e grava o model_manifest.json."""
     print("=" * 60)
     print("Exportando modelos para ONNX — Delfos v1.0")
     print("=" * 60)
@@ -149,7 +134,7 @@ def build_manifest():
     errors  = []
 
     for registry_name, file_prefix in REGISTRY_TO_FILE.items():
-        print(f"\n→ {registry_name}")
+        print(f"\n-> {registry_name}")
         try:
             entry = export_model(registry_name, file_prefix)
             entries.append(entry)
@@ -166,10 +151,10 @@ def build_manifest():
 
     manifest_path = ONNX_DIR / "model_manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
-    print(f"\n  [manifest] {manifest_path.relative_to(Path(__file__).parents[2])}")
+    print(f"\n  [manifest] {manifest_path.relative_to(ROOT_DIR)}")
 
     if errors:
-        print(f"\n  [AVISO] {len(errors)} modelo(s) com erro — ver campo 'errors' no manifest.")
+        print(f"\n  [AVISO] {len(errors)} modelo(s) com erro.")
     else:
         print(f"\n  [OK] {len(entries)} modelos exportados com sucesso.")
 
