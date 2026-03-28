@@ -1,5 +1,27 @@
-# Docs
-docs
+# Dados brutos e processados (gerados pelo pipeline)
+data/raw/
+data/processed/
+
+# Modelos treinados e artefatos gerados
+models/trained/
+models/preprocessors/
+models/onnx/
+
+# Relatórios e gráficos gerados
+reports/plots/
+
+# MLflow
+mlflow.db
+mlruns/
+
+# Python
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+
+# Claude Code
+.claude/
+
 
 # Environment variables
 .env

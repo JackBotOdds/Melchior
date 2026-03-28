@@ -4,7 +4,7 @@ from pathlib import Path
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 
-HOLDOUT_SIZE = 0.15
+HOLDOUT_SIZE = 0.10   # 10% reservado para teste do modelo já treinado
 HOLDOUT_SEED = 42
 
 def fit_and_split(dfs: dict[str, pd.DataFrame], preprocessors_dir: Path, processed_dir: Path):
@@ -16,9 +16,19 @@ def fit_and_split(dfs: dict[str, pd.DataFrame], preprocessors_dir: Path, process
     preprocessors_dir.mkdir(parents=True, exist_ok=True)
     processed_dir.mkdir(parents=True, exist_ok=True)
 
+    # Colunas que NAO devem ser escalonadas (targets + identificadores)
+    NON_SCALE = {
+        "outcome", "total_goals", "goals_home_frac", "total_corners",
+        "total_red_cards", "total_yellow_cards", "total_sog",
+        "home_score", "away_score", "match_id", "player_id",
+    }
+
     for name, df in dfs.items():
-        # 1. Identificar colunas numéricas
-        numeric_cols = df.select_dtypes(include=["number"]).columns.tolist()
+        # 1. Apenas features numericas (exclui targets e IDs)
+        numeric_cols = [
+            c for c in df.select_dtypes(include=["number"]).columns
+            if c not in NON_SCALE
+        ]
         
         # 2. Split de treino e holdout com estratificação por competition_type
         train_df, holdout_df = train_test_split(

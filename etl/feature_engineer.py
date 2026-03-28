@@ -7,45 +7,41 @@ def engineer(dfs: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
     """
     engineered_dfs = {}
 
+    # Mapeamento legado: CSVs wc2022_* e ligue1_2021_2022_* não têm competition_type.
+    # Usa os mesmos valores do statsbomb_loader para consistência nos get_dummies.
     context_mapping = {
-        "wc2022": "World Cup",
-        "ligue1_2021_2022": "Ligue 1"
+        "wc2022":            "World Cup",
+        "ligue1_2021_2022":  "Domestic League",
     }
 
     for name, df in dfs.items():
         current_df = df.copy()
 
-        # Mapeamento de tipo de competição para todos os DataFrames
-        if "source_context" in current_df.columns:
-            current_df["competition_type"] = current_df["source_context"].map(context_mapping)
+        # competition_type: três casos possíveis ao concatenar CSVs novos e legados:
+        # 1. Coluna ausente (dados 100% legados) → cria via source_context
+        # 2. Coluna presente com NaN (mix de legado + novo) → preenche NaN via source_context
+        # 3. Coluna presente sem NaN (dados 100% novos) → não faz nada
+        if "competition_type" not in current_df.columns:
+            if "source_context" in current_df.columns:
+                current_df["competition_type"] = (
+                    current_df["source_context"].map(context_mapping).fillna("Other")
+                )
+            else:
+                current_df["competition_type"] = "Other"
+        elif current_df["competition_type"].isna().any() and "source_context" in current_df.columns:
+            mask = current_df["competition_type"].isna()
+            current_df.loc[mask, "competition_type"] = (
+                current_df.loc[mask, "source_context"].map(context_mapping).fillna("Other")
+            )
 
         # Regras exclusivas para o DataFrame player_sog
         if name == "player_sog":
-            # 1 & 2. Features de interação (ID x Contexto)
+            # Mascara baseada em source_context para ser robusto a qualquer valor de competition_type
+            is_wc = current_df["source_context"].str.contains("wc|world_cup|comp43", case=False, na=False)
+
+            # Feature de interação: player_id x Copa do Mundo
             current_df["player_id_x_world_cup"] = 0
-            current_df.loc[current_df["competition_type"] == "World Cup", "player_id_x_world_cup"] = current_df["player_id"]
-            
-            current_df["player_id_x_ligue_1"] = 0
-            current_df.loc[current_df["competition_type"] == "Ligue 1", "player_id_x_ligue_1"] = current_df["player_id"]
-
-            # 3. Evitar Leakage: Ordenar obrigatoriamente por match_date
-            if "match_date" in current_df.columns:
-                current_df["match_date"] = pd.to_datetime(current_df["match_date"])
-                current_df = current_df.sort_values("match_date")
-
-            # 4. Cálculo de avg_total_sog_ligue1 com shift(1) para evitar look-ahead bias
-            ligue1_mask = current_df["competition_type"] == "Ligue 1"
-            
-            # Calculamos a média expandida apenas no subset da Ligue 1
-            # O transform(lambda x: ...) garante que o cálculo respeite o agrupamento por jogador
-            current_df.loc[ligue1_mask, "avg_total_sog_ligue1"] = (
-                current_df[ligue1_mask]
-                .groupby("player_id")["total_sog"]
-                .transform(lambda x: x.expanding().mean().shift(1))
-            )
-            
-            # 5. Preencher NaNs com 0 (casos da primeira partida ou outras competições)
-            current_df["avg_total_sog_ligue1"] = current_df["avg_total_sog_ligue1"].fillna(0)
+            current_df.loc[is_wc, "player_id_x_world_cup"] = current_df.loc[is_wc, "player_id"]
 
         engineered_dfs[name] = current_df
 
