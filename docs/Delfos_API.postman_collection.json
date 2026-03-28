@@ -1,25 +1,34 @@
 {
   "info": {
-    "name": "Delfos API v1.0",
-    "description": "API de inferência do pipeline Delfos — JackBot ML Service.\n\nPré-requisito: API rodando em http://localhost:8000 (bash run_api.sh)\n\nIDs de exemplo retirados do feature store (team_outcome_train.parquet):\n- 3829431 → Lorient vs Bastia (Domestic League)\n- 3754060 → Everton vs Liverpool (Domestic League)\n- 3930168 → Germany vs Hungary (Continental)\n- 3893801 → Brazil Women's vs Panama Women's (Continental)",
-    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    "name": "Delfos — JackBot ML Service",
+    "description": "API de inferência preditiva para partidas de futebol em tempo real.\n\nGrupos de endpoints:\n\n  1. Health — status da API e modelos carregados\n  2. Histórico — predição por match_id do StatsBomb (para testes)\n  3. Live (manual) — predição com features do 1º tempo passadas diretamente\n  4. BetsAPI — predição via fixture ID (fi); o Delfos busca os dados automaticamente\n\nVariáveis de coleção:\n  {{base_url}}    → http://localhost:8000\n  {{match_id}}    → ID histórico do StatsBomb (ex: 3829431)\n  {{betsapi_fi}}  → Fixture ID de jogo ao vivo na BetsAPI\n\nComo obter um fi válido:\n  GET https://api.b365api.com/v1/bet365/inplay?token=SEU_TOKEN\n  Filtre por sport_id=1 (futebol) e copie o campo fi de qualquer evento.\n\nIDs históricos de exemplo para testes:\n  3829431 → Lorient vs Bastia (Domestic League)\n  3754060 → Everton vs Liverpool (Domestic League)\n  3930168 → Germany vs Hungary (Continental)\n  3893801 → Brazil W vs Panama W (Continental)\n\nStatus dos modelos (v1.0.0):\n  total_goals      → OK\n  corners          → OK\n  yellow_cards     → OK\n  red_cards        → OK\n  match_outcome    → PENDENTE (bug de exportação ONNX com XGBoost 3.x)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "version": { "major": 2, "minor": 0, "patch": 0 }
   },
   "variable": [
     {
       "key": "base_url",
       "value": "http://localhost:8000",
-      "type": "string"
+      "type": "string",
+      "description": "URL base da API Delfos. Altere para o host de produção quando necessário."
     },
     {
       "key": "match_id",
-      "value": "3754060",
+      "value": "3829431",
       "type": "string",
-      "description": "Everton vs Liverpool — troque por qualquer match_id válido do feature store"
+      "description": "match_id de partida histórica do StatsBomb. Disponível nos parquets de data/processed/."
+    },
+    {
+      "key": "betsapi_fi",
+      "value": "",
+      "type": "string",
+      "description": "Fixture ID de um jogo ao vivo na BetsAPI. Obtenha via GET api.b365api.com/v1/bet365/inplay?token=TOKEN e procure por sport_id=1."
     }
   ],
   "item": [
+
     {
-      "name": "Health",
+      "name": "1 — Health",
       "item": [
         {
           "name": "GET /health",
@@ -31,135 +40,114 @@
               "host": ["{{base_url}}"],
               "path": ["health"]
             },
-            "description": "Verifica se a API está no ar e quais modelos estão carregados."
+            "description": "Retorna o status da API, a lista de modelos ONNX carregados em memória e a disponibilidade do feature store.\n\nUse este endpoint para verificar se a API está pronta antes de enviar predições."
           },
           "response": [
             {
-              "name": "200 OK",
+              "name": "200 OK — API saudável",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": { "raw": "{{base_url}}/health", "host": ["{{base_url}}"], "path": ["health"] }
+              },
               "status": "OK",
               "code": 200,
-              "body": "{\n  \"status\": \"ok\",\n  \"model_version\": \"1.0.0\",\n  \"models_loaded\": [\"match_outcome\", \"total_goals\", \"corners\", \"yellow_cards\", \"red_cards\"]\n}"
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"status\": \"ok\",\n  \"model_version\": \"1.0.0\",\n  \"models_loaded\": [\n    \"total_goals\",\n    \"corners\",\n    \"red_cards\",\n    \"yellow_cards\"\n  ],\n  \"store_ready\": true\n}"
             }
           ]
         }
       ]
     },
+
     {
-      "name": "Predictions",
+      "name": "2 — Predições Históricas (match_id)",
+      "description": "Predições a partir de partidas históricas do StatsBomb.\nO match_id deve existir no feature store (data/processed/*.parquet).\nOs dados já vêm normalizados do pipeline ETL — sem pré-processamento adicional.",
       "item": [
         {
           "name": "POST /v1/predict/match-outcome",
           "request": {
             "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"match_id\": \"{{match_id}}\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
+              "options": { "raw": { "language": "json" } }
             },
             "url": {
               "raw": "{{base_url}}/v1/predict/match-outcome",
               "host": ["{{base_url}}"],
               "path": ["v1", "predict", "match-outcome"]
             },
-            "description": "Prediz o resultado final da partida (vitória casa / empate / vitória visitante).\n\nRetorna probabilidades e o resultado mais provável (HOME / DRAW / AWAY)."
+            "description": "Probabilidades de vitória da equipe da casa, empate e vitória visitante.\n\nStatus atual: retorna HTTP 503. O modelo XGBClassifier não pôde ser exportado para ONNX por incompatibilidade entre XGBoost 3.x e onnxmltools (chave split_condition ausente em nós binários)."
           },
           "response": [
             {
-              "name": "200 OK",
-              "status": "OK",
-              "code": 200,
-              "body": "{\n  \"home_win_probability\": 0.55,\n  \"draw_probability\": 0.25,\n  \"away_win_probability\": 0.20,\n  \"favorite_outcome\": \"HOME\",\n  \"confidence_score\": 0.55,\n  \"model_version\": \"1.0.0\",\n  \"generated_at\": \"2025-01-01T00:00:00+00:00\"\n}"
-            },
-            {
-              "name": "400 match_id inválido",
-              "status": "Bad Request",
-              "code": 400,
-              "body": "{\n  \"detail\": \"match_id deve ser numérico, recebido: 'abc'\"\n}"
-            },
-            {
-              "name": "404 partida não encontrada",
-              "status": "Not Found",
-              "code": 404,
-              "body": "{\n  \"detail\": \"match_id 9999999 não encontrado no feature store\"\n}"
-            },
-            {
-              "name": "503 modelo não carregado",
+              "name": "503 — match_outcome não carregado (bug exportação ONNX)",
+              "originalRequest": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{\"match_id\": \"3829431\"}" },
+                "url": { "raw": "{{base_url}}/v1/predict/match-outcome", "host": ["{{base_url}}"], "path": ["v1", "predict", "match-outcome"] }
+              },
               "status": "Service Unavailable",
               "code": 503,
-              "body": "{\n  \"detail\": \"Modelo 'match_outcome' não está carregado. Execute export_models.py.\"\n}"
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"detail\": \"Modelo match_outcome não carregado.\"\n}"
+            },
+            {
+              "name": "200 OK — resposta esperada quando corrigido",
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"home_win_probability\": 0.5821,\n  \"draw_probability\": 0.2344,\n  \"away_win_probability\": 0.1835,\n  \"favorite_outcome\": \"HOME\",\n  \"confidence_score\": 0.5821,\n  \"model_version\": \"1.0.0\",\n  \"generated_at\": \"2026-03-28T10:00:00Z\"\n}"
             }
           ]
-        },
-        {
-          "name": "POST /v1/predict/match-outcome (com season)",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"match_id\": \"{{match_id}}\",\n  \"season\": \"2022\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": {
-              "raw": "{{base_url}}/v1/predict/match-outcome",
-              "host": ["{{base_url}}"],
-              "path": ["v1", "predict", "match-outcome"]
-            },
-            "description": "Mesmo endpoint com campo season opcional (ignorado na v1, aceito pelo schema)."
-          },
-          "response": []
         },
         {
           "name": "POST /v1/predict/total-goals",
           "request": {
             "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"match_id\": \"{{match_id}}\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
+              "options": { "raw": { "language": "json" } }
             },
             "url": {
               "raw": "{{base_url}}/v1/predict/total-goals",
               "host": ["{{base_url}}"],
               "path": ["v1", "predict", "total-goals"]
             },
-            "description": "Prediz o total de gols esperados na partida.\n\nRetorna expected_goals e probabilidades over/under 2.5."
+            "description": "Prediz o total de gols esperados no jogo completo.\nInclui probabilidades over/under 2.5 calculadas via distribuição de Poisson."
           },
           "response": [
             {
               "name": "200 OK",
+              "originalRequest": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{\"match_id\": \"3829431\"}" },
+                "url": { "raw": "{{base_url}}/v1/predict/total-goals", "host": ["{{base_url}}"], "path": ["v1", "predict", "total-goals"] }
+              },
               "status": "OK",
               "code": 200,
-              "body": "{\n  \"expected_goals\": 2.7,\n  \"over_25_probability\": 0.58,\n  \"under_25_probability\": 0.42,\n  \"most_likely_range\": \"2-3\",\n  \"confidence_score\": 0.58,\n  \"model_version\": \"1.0.0\",\n  \"generated_at\": \"2025-01-01T00:00:00+00:00\"\n}"
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"expected_goals\": 2.4532,\n  \"over_25_probability\": 0.4441,\n  \"under_25_probability\": 0.5559,\n  \"most_likely_range\": \"2-3\",\n  \"confidence_score\": 0.5559,\n  \"model_version\": \"1.0.0\",\n  \"generated_at\": \"2026-03-28T09:26:54.160801Z\"\n}"
+            },
+            {
+              "name": "404 — match_id não encontrado",
+              "status": "Not Found",
+              "code": 404,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"detail\": \"match_id=999 não encontrado no dataset.\"\n}"
+            },
+            {
+              "name": "400 — match_id não numérico",
+              "status": "Bad Request",
+              "code": 400,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"detail\": \"match_id deve ser numérico, recebido: 'abc'\"\n}"
             }
           ]
         },
@@ -167,34 +155,32 @@
           "name": "POST /v1/predict/corners",
           "request": {
             "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"match_id\": \"{{match_id}}\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
+              "options": { "raw": { "language": "json" } }
             },
             "url": {
               "raw": "{{base_url}}/v1/predict/corners",
               "host": ["{{base_url}}"],
               "path": ["v1", "predict", "corners"]
             },
-            "description": "Prediz o total de escanteios esperados na partida.\n\nRetorna expected_corners e probabilidades over/under 9."
+            "description": "Prediz o total de escanteios esperados no jogo completo.\nInclui probabilidades over/under 9 calculadas via distribuição de Poisson."
           },
           "response": [
             {
               "name": "200 OK",
+              "originalRequest": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{\"match_id\": \"3829431\"}" },
+                "url": { "raw": "{{base_url}}/v1/predict/corners", "host": ["{{base_url}}"], "path": ["v1", "predict", "corners"] }
+              },
               "status": "OK",
               "code": 200,
-              "body": "{\n  \"expected_corners\": 9.4,\n  \"over_9_probability\": 0.52,\n  \"under_9_probability\": 0.48,\n  \"confidence_score\": 0.52,\n  \"model_version\": \"1.0.0\",\n  \"generated_at\": \"2025-01-01T00:00:00+00:00\"\n}"
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"expected_corners\": 7.3398,\n  \"over_9_probability\": 0.2056,\n  \"under_9_probability\": 0.7944,\n  \"confidence_score\": 0.7944,\n  \"model_version\": \"1.0.0\",\n  \"generated_at\": \"2026-03-28T09:26:54.411502Z\"\n}"
             }
           ]
         },
@@ -202,124 +188,317 @@
           "name": "POST /v1/predict/cards",
           "request": {
             "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"match_id\": \"{{match_id}}\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
+              "options": { "raw": { "language": "json" } }
             },
             "url": {
               "raw": "{{base_url}}/v1/predict/cards",
               "host": ["{{base_url}}"],
               "path": ["v1", "predict", "cards"]
             },
-            "description": "Prediz o total de cartões esperados na partida.\n\nRetorna expected_yellow_cards, expected_red_cards e probabilidades over/under 3 amarelos."
+            "description": "Prediz cartões amarelos e vermelhos esperados no jogo completo.\nO modelo de cartão vermelho tem baixa frequência de eventos (média < 0.3/jogo), por isso expected_red_cards tende a ser baixo."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{\"match_id\": \"3829431\"}" },
+                "url": { "raw": "{{base_url}}/v1/predict/cards", "host": ["{{base_url}}"], "path": ["v1", "predict", "cards"] }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"expected_yellow_cards\": 4.0391,\n  \"expected_red_cards\": 0.0844,\n  \"over_3_yellow_probability\": 0.5741,\n  \"under_3_yellow_probability\": 0.4259,\n  \"confidence_score\": 0.5741,\n  \"model_version\": \"1.0.0\",\n  \"generated_at\": \"2026-03-28T09:26:54.668502Z\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      "name": "3 — Predições Live (features manuais)",
+      "description": "Predições passando as estatísticas do 1º tempo diretamente no corpo da requisição.\nÚtil para testes de integração ou quando o caller já tem as features extraídas de outra fonte.\n\nOs valores são as estatísticas ACUMULADAS até o momento da chamada.\nO servidor normaliza automaticamente via StandardScaler antes da inferência.\n\nPara integração automática com BetsAPI, use o grupo 4.",
+      "item": [
+        {
+          "name": "POST /v1/predict/live/match-outcome",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"competition_type\": \"Domestic League\",\n  \"ht_goals_home\": 1,\n  \"ht_goals_away\": 0,\n  \"ht_shots_home\": 6,\n  \"ht_shots_away\": 3,\n  \"ht_sog_home\": 3,\n  \"ht_sog_away\": 1,\n  \"ht_fouls_home\": 5,\n  \"ht_fouls_away\": 7,\n  \"ht_corners_home\": 4,\n  \"ht_corners_away\": 2,\n  \"ht_yellow_cards_home\": 1,\n  \"ht_yellow_cards_away\": 2\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/predict/live/match-outcome",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "predict", "live", "match-outcome"]
+            },
+            "description": "Status atual: 503 — mesmo modelo match_outcome ainda não exportado.\n\ncompetition_type aceita: \"Domestic League\" (default) | \"World Cup\" | \"Continental\""
+          },
+          "response": [
+            {
+              "name": "503 — Modelo não carregado",
+              "status": "Service Unavailable",
+              "code": 503,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"detail\": \"Modelo match_outcome não carregado.\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "POST /v1/predict/live/total-goals",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"competition_type\": \"Domestic League\",\n  \"ht_goals_home\": 1,\n  \"ht_goals_away\": 0,\n  \"ht_shots_home\": 6,\n  \"ht_shots_away\": 3,\n  \"ht_sog_home\": 3,\n  \"ht_sog_away\": 1,\n  \"ht_fouls_home\": 5,\n  \"ht_fouls_away\": 7,\n  \"ht_corners_home\": 4,\n  \"ht_corners_away\": 2,\n  \"ht_yellow_cards_home\": 1,\n  \"ht_yellow_cards_away\": 2\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/predict/live/total-goals",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "predict", "live", "total-goals"]
+            }
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{\n  \"competition_type\": \"Domestic League\",\n  \"ht_goals_home\": 1, \"ht_goals_away\": 0,\n  \"ht_shots_home\": 6, \"ht_shots_away\": 3,\n  \"ht_sog_home\": 3, \"ht_sog_away\": 1,\n  \"ht_fouls_home\": 5, \"ht_fouls_away\": 7,\n  \"ht_corners_home\": 4, \"ht_corners_away\": 2,\n  \"ht_yellow_cards_home\": 1, \"ht_yellow_cards_away\": 2\n}" },
+                "url": { "raw": "{{base_url}}/v1/predict/live/total-goals", "host": ["{{base_url}}"], "path": ["v1", "predict", "live", "total-goals"] }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"expected_goals\": 2.5961,\n  \"over_25_probability\": 0.4806,\n  \"under_25_probability\": 0.5194,\n  \"most_likely_range\": \"2-3\",\n  \"confidence_score\": 0.5194,\n  \"model_version\": \"1.0.0\",\n  \"generated_at\": \"2026-03-28T09:26:55.173512Z\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "POST /v1/predict/live/corners",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"competition_type\": \"Domestic League\",\n  \"ht_goals_home\": 1,\n  \"ht_goals_away\": 0,\n  \"ht_shots_home\": 6,\n  \"ht_shots_away\": 3,\n  \"ht_sog_home\": 3,\n  \"ht_sog_away\": 1,\n  \"ht_fouls_home\": 5,\n  \"ht_fouls_away\": 7,\n  \"ht_corners_home\": 4,\n  \"ht_corners_away\": 2,\n  \"ht_yellow_cards_home\": 1,\n  \"ht_yellow_cards_away\": 2\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/predict/live/corners",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "predict", "live", "corners"]
+            }
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{\n  \"competition_type\": \"Domestic League\",\n  \"ht_goals_home\": 1, \"ht_goals_away\": 0,\n  \"ht_shots_home\": 6, \"ht_shots_away\": 3,\n  \"ht_sog_home\": 3, \"ht_sog_away\": 1,\n  \"ht_fouls_home\": 5, \"ht_fouls_away\": 7,\n  \"ht_corners_home\": 4, \"ht_corners_away\": 2,\n  \"ht_yellow_cards_home\": 1, \"ht_yellow_cards_away\": 2\n}" },
+                "url": { "raw": "{{base_url}}/v1/predict/live/corners", "host": ["{{base_url}}"], "path": ["v1", "predict", "live", "corners"] }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"expected_corners\": 10.8014,\n  \"over_9_probability\": 0.6376,\n  \"under_9_probability\": 0.3624,\n  \"confidence_score\": 0.6376,\n  \"model_version\": \"1.0.0\",\n  \"generated_at\": \"2026-03-28T09:26:55.431502Z\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "POST /v1/predict/live/cards",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"competition_type\": \"Domestic League\",\n  \"ht_goals_home\": 1,\n  \"ht_goals_away\": 0,\n  \"ht_shots_home\": 6,\n  \"ht_shots_away\": 3,\n  \"ht_sog_home\": 3,\n  \"ht_sog_away\": 1,\n  \"ht_fouls_home\": 5,\n  \"ht_fouls_away\": 7,\n  \"ht_corners_home\": 4,\n  \"ht_corners_away\": 2,\n  \"ht_yellow_cards_home\": 1,\n  \"ht_yellow_cards_away\": 2\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/predict/live/cards",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "predict", "live", "cards"]
+            }
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{\n  \"competition_type\": \"Domestic League\",\n  \"ht_goals_home\": 1, \"ht_goals_away\": 0,\n  \"ht_shots_home\": 6, \"ht_shots_away\": 3,\n  \"ht_sog_home\": 3, \"ht_sog_away\": 1,\n  \"ht_fouls_home\": 5, \"ht_fouls_away\": 7,\n  \"ht_corners_home\": 4, \"ht_corners_away\": 2,\n  \"ht_yellow_cards_home\": 1, \"ht_yellow_cards_away\": 2\n}" },
+                "url": { "raw": "{{base_url}}/v1/predict/live/cards", "host": ["{{base_url}}"], "path": ["v1", "predict", "live", "cards"] }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"expected_yellow_cards\": 5.3087,\n  \"expected_red_cards\": 0.1228,\n  \"over_3_yellow_probability\": 0.7757,\n  \"under_3_yellow_probability\": 0.2243,\n  \"confidence_score\": 0.7757,\n  \"model_version\": \"1.0.0\",\n  \"generated_at\": \"2026-03-28T09:26:55.692502Z\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      "name": "4 — Predições BetsAPI (jogo ao vivo)",
+      "description": "Integração direta com a BetsAPI (Bet365).\n\nO cliente envia apenas o fi (fixture ID). O Delfos:\n  1. Busca as estatísticas ao vivo via api.b365api.com/v1/bet365/inplay_stats\n  2. Valida o período (aceita timer.q = '1' ou 'HT'; rejeita '2', 'FT' com HTTP 422)\n  3. Mapeia os campos: on_target → sog, on_target+off_target → shots\n  4. Normaliza via StandardScaler e executa os modelos HT\n  5. Retorna as probabilidades\n\nO token da BetsAPI fica no servidor (.env: BETSAPI_TOKEN=xxx). Não é enviado pelo cliente.",
+      "item": [
+        {
+          "name": "POST /v1/predict/betsapi/match-outcome",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fi\": \"{{betsapi_fi}}\",\n  \"competition_type\": \"Domestic League\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/predict/betsapi/match-outcome",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "predict", "betsapi", "match-outcome"]
+            },
+            "description": "Status atual: 503 — modelo match_outcome ainda pendente.\n\ncompetition_type aceita: \"Domestic League\" (default) | \"World Cup\" | \"Continental\"\n\nQuando o modelo estiver disponível, retornará HOME / DRAW / AWAY com probabilidades e confidence_score."
+          },
+          "response": [
+            {
+              "name": "503 — Modelo não carregado (pendente)",
+              "status": "Service Unavailable",
+              "code": 503,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"detail\": \"Modelo match_outcome não carregado.\"\n}"
+            },
+            {
+              "name": "200 OK — resposta esperada quando corrigido",
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"home_win_probability\": 0.5821,\n  \"draw_probability\": 0.2344,\n  \"away_win_probability\": 0.1835,\n  \"favorite_outcome\": \"HOME\",\n  \"confidence_score\": 0.5821,\n  \"model_version\": \"1.0.0\",\n  \"generated_at\": \"2026-03-28T10:00:00Z\"\n}"
+            },
+            {
+              "name": "404 — Fixture não encontrado na BetsAPI",
+              "status": "Not Found",
+              "code": 404,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"detail\": \"Fixture fi=99999999 não encontrado na BetsAPI.\"\n}"
+            },
+            {
+              "name": "422 — Jogo fora da janela HT (2º tempo ou encerrado)",
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"detail\": \"Jogo fora da janela de predição HT. Período atual: 2. Use apenas no 1º tempo ou intervalo.\"\n}"
+            },
+            {
+              "name": "503 — BetsAPI indisponível ou timeout",
+              "status": "Service Unavailable",
+              "code": 503,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"detail\": \"BetsAPI timeout para fi=12345: ...\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "POST /v1/predict/betsapi/total-goals",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fi\": \"{{betsapi_fi}}\",\n  \"competition_type\": \"Domestic League\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/predict/betsapi/total-goals",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "predict", "betsapi", "total-goals"]
+            },
+            "description": "Prediz gols totais esperados no jogo completo com base nas estatísticas do 1º tempo via BetsAPI.\nOperacional — retorna 200 para fi válido de jogo ao vivo."
+          },
+          "response": [
+            {
+              "name": "200 OK — jogo ao vivo real",
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"expected_goals\": 2.4872,\n  \"over_25_probability\": 0.4612,\n  \"under_25_probability\": 0.5388,\n  \"most_likely_range\": \"2-3\",\n  \"confidence_score\": 0.5388,\n  \"model_version\": \"1.0.0\",\n  \"generated_at\": \"2026-03-28T10:00:00Z\"\n}"
+            },
+            {
+              "name": "404 — Fixture não encontrado",
+              "status": "Not Found",
+              "code": 404,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"detail\": \"Fixture fi=99999999 não encontrado na BetsAPI.\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "POST /v1/predict/betsapi/corners",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fi\": \"{{betsapi_fi}}\",\n  \"competition_type\": \"Domestic League\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/predict/betsapi/corners",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "predict", "betsapi", "corners"]
+            },
+            "description": "Prediz escanteios totais esperados no jogo completo.\nOperacional — retorna 200 para fi válido de jogo ao vivo."
           },
           "response": [
             {
               "name": "200 OK",
               "status": "OK",
               "code": 200,
-              "body": "{\n  \"expected_yellow_cards\": 3.1,\n  \"expected_red_cards\": 0.2,\n  \"over_3_yellow_probability\": 0.51,\n  \"under_3_yellow_probability\": 0.49,\n  \"confidence_score\": 0.51,\n  \"model_version\": \"1.0.0\",\n  \"generated_at\": \"2025-01-01T00:00:00+00:00\"\n}"
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"expected_corners\": 9.4231,\n  \"over_9_probability\": 0.5312,\n  \"under_9_probability\": 0.4688,\n  \"confidence_score\": 0.5312,\n  \"model_version\": \"1.0.0\",\n  \"generated_at\": \"2026-03-28T10:00:00Z\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "POST /v1/predict/betsapi/cards",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fi\": \"{{betsapi_fi}}\",\n  \"competition_type\": \"Domestic League\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/predict/betsapi/cards",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "predict", "betsapi", "cards"]
+            },
+            "description": "Prediz cartões amarelos e vermelhos esperados.\nOperacional — retorna 200 para fi válido de jogo ao vivo."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"expected_yellow_cards\": 4.9024,\n  \"expected_red_cards\": 0.0912,\n  \"over_3_yellow_probability\": 0.6841,\n  \"under_3_yellow_probability\": 0.3159,\n  \"confidence_score\": 0.6841,\n  \"model_version\": \"1.0.0\",\n  \"generated_at\": \"2026-03-28T10:00:00Z\"\n}"
             }
           ]
         }
       ]
-    },
-    {
-      "name": "Erros — validação",
-      "item": [
-        {
-          "name": "match_id não numérico → 400",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"match_id\": \"abc\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": {
-              "raw": "{{base_url}}/v1/predict/match-outcome",
-              "host": ["{{base_url}}"],
-              "path": ["v1", "predict", "match-outcome"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "match_id inexistente → 404",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"match_id\": \"9999999\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": {
-              "raw": "{{base_url}}/v1/predict/match-outcome",
-              "host": ["{{base_url}}"],
-              "path": ["v1", "predict", "match-outcome"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "body vazio → 422",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": {
-              "raw": "{{base_url}}/v1/predict/match-outcome",
-              "host": ["{{base_url}}"],
-              "path": ["v1", "predict", "match-outcome"]
-            }
-          },
-          "response": []
-        }
-      ]
     }
+
   ]
 }

@@ -1,189 +1,281 @@
+# Melchior — JackBot Predictive Analytics
 
-# Melchior: Predictive Analytics Assistant
-
-<div align="center">
-  <img src="https://raw.githubusercontent.com/Macedo-felipe/Melchior/main/frontend/src/assets/hero.png" alt="Project Banner" width="120"/>
-</div>
-
-<p align="center">
-  <strong>JackBot é um assistente analítico para apostas esportivas.</strong>
-  <br />
-  Seu objetivo é traduzir previsões estatísticas complexas em textos simples, educativos e legíveis por humanos, ajudando os usuários a tomar decisões mais informadas.
-</p>
-
-<p align="center">
-  <a href="#-sobre-o-projeto">Sobre o Projeto</a> •
-  <a href="#-tecnologias">Tecnologias</a> •
-  <a href="#-arquitetura">Arquitetura</a> •
-  <a href="#-começando">Começando</a> •
-  <a href="#-endpoints-da-api">Endpoints da API</a> •
-  <a href="#-roadmap">Roadmap</a>
-</p>
-
-<p align="center">
-  <img src="https://img.shields.io/badge/Java-21-blue.svg?style=for-the-badge&logo=java" alt="Java 21">
-  <img src="https://img.shields.io/badge/Spring%20Boot-3.x-brightgreen.svg?style=for-the-badge&logo=spring" alt="Spring Boot 3.x">
-  <img src="https://img.shields.io/badge/React-19-blue.svg?style=for-the-badge&logo=react" alt="React 18">
-  <img src="https://img.shields.io/badge/TypeScript-5.x-blue.svg?style=for-the-badge&logo=typescript" alt="TypeScript 5.x">
-  <img src="https://img.shields.io/badge/Docker-blue.svg?style=for-the-badge&logo=docker" alt="Docker">
-  <img src="https://img.shields.io/badge/Maven-4.0.0-red.svg?style=for-the-badge&logo=apache-maven" alt="Maven">
-  <img src="https://img.shields.io/badge/Vite-8.0.1-yellow.svg?style=for-the-badge&logo=vite" alt="Vite">
-</p>
+Sistema de predição de eventos em partidas de futebol ao vivo, composto por um serviço Java de orquestração e um serviço Python de inferência baseado em aprendizado de máquina.
 
 ---
 
-## 📖 Sobre o Projeto
+## Visão geral
 
-O **Melchior** é um sistema de análise preditiva para o mercado de apostas esportivas. A plataforma é composta por um backend robusto em Java com Spring Boot e um frontend moderno em React com TypeScript. O objetivo principal é consumir dados estatísticos e de modelos de Machine Learning, e apresentá-los de forma clara e intuitiva para o usuário final.
+O **Delfos** é o serviço de ML do Melchior. Ele treina modelos com dados históricos do StatsBomb Open Data (3.500+ partidas, 75+ competições) e expõe uma API REST para predições em tempo real integrada com a BetsAPI (Bet365).
 
-### Funcionalidades
+### O que o sistema prediz
 
-- **Backend**: Serviço RESTful que fornece predições para diversos aspectos de uma partida de futebol.
-- **Frontend**: Interface reativa e amigável que consome os dados do backend e os exibe em formato de cards de predição.
-- **Containerização**: Suporte a Docker para fácil configuração e deploy do ambiente de desenvolvimento.
-- **Documentação de API**: Documentação automática da API com OpenAPI (Swagger).
+| Predição | Modelo | Status |
+|---|---|---|
+| Resultado final (Casa / Empate / Fora) | XGBClassifier | Pendente — bug exportação ONNX |
+| Total de gols | GradientBoostingRegressor | Operacional |
+| Total de escanteios | GradientBoostingRegressor / PoissonRegressor | Operacional |
+| Total de cartões amarelos | GradientBoostingRegressor / PoissonRegressor | Operacional |
+| Total de cartões vermelhos | GradientBoostingRegressor / PoissonRegressor | Operacional |
 
----
-
-## 🛠️ Tecnologias
-
-O projeto é construído com as seguintes tecnologias:
-
-### Backend
-- **Java 21**: Versão mais recente do Java, garantindo performance e acesso a features modernas da linguagem.
-- **Spring Boot 3.3.1**: Framework para criação de aplicações Java de forma rápida e configurável.
-- **Spring Security**: Para futuras implementações de segurança na API.
-- **Project Lombok**: Para reduzir código boilerplate em classes Java.
-- **SpringDoc OpenAPI**: Para geração automática de documentação da API.
-- **Maven**: Gerenciador de dependências e build do projeto.
-
-### Frontend
-- **React 19**: Biblioteca para construção de interfaces de usuário.
-- **TypeScript 5**: Superset do JavaScript que adiciona tipagem estática.
-- **Vite**: Ferramenta de build e desenvolvimento frontend extremamente rápida.
-- **Axios**: Cliente HTTP para realizar requisições à API.
-- **ESLint**: Para garantir a qualidade e padronização do código.
-
-### Infraestrutura
-- **Docker & Docker Compose**: Para containerização da aplicação e orquestração dos serviços.
-- **Makefile**: Para automação de tarefas comuns de desenvolvimento.
+Todos os modelos usam estatísticas do **1º tempo** para predizer o jogo completo. O fluxo principal é: Java recebe um jogo ao vivo → envia o `fi` (fixture ID da BetsAPI) para o Delfos → Delfos busca os dados, normaliza e retorna as probabilidades.
 
 ---
 
-## 🏗️ Arquitetura
+## Estrutura do repositório
 
-O sistema é desenhado como uma aplicação web desacoplada, composta por dois serviços principais:
-
-1.  **Backend (`predictive-service`):** Um microsserviço Java/Spring Boot que expõe uma API REST para buscar predições esportivas. Na sprint atual, ele serve dados realistas, porém "stubados" (hardcoded).
-2.  **Frontend:** Uma aplicação de página única (SPA) em React + TypeScript que consome a API do backend e apresenta os dados ao usuário. Contém uma camada de dados robusta com hooks customizados para gerenciamento de estado, tratamento de erros e analytics.
-
-```mermaid
-graph TD;
-    Frontend -- HTTP Request --> Backend;
-    Backend -- JSON Response --> Frontend;
+```
+Melchior/
+├── delfos/                        # Serviço de ML (Python / FastAPI)
+│   ├── api/
+│   │   ├── app.py                 # Aplicação FastAPI
+│   │   ├── routers/
+│   │   │   ├── health.py          # GET /health
+│   │   │   ├── predictions.py     # POST /v1/predict/*
+│   │   │   └── betsapi.py         # POST /v1/predict/betsapi/*
+│   │   ├── schemas/
+│   │   │   ├── request.py         # LiveMatchRequest, PredictionRequest
+│   │   │   └── response.py        # MatchOutcomeResponse, etc.
+│   │   └── services/
+│   │       ├── inference.py       # Lógica de inferência ONNX
+│   │       ├── model_registry.py  # Carrega sessões ONNX do manifest
+│   │       ├── feature_store.py   # Lookup por match_id + normalização live
+│   │       ├── betsapi_client.py  # HTTP async para a BetsAPI
+│   │       └── betsapi_mapper.py  # Mapeia JSON BetsAPI → LiveMatchRequest
+│   ├── training/
+│   │   ├── train_match_outcome.py
+│   │   ├── train_total_goals.py
+│   │   ├── train_corners.py
+│   │   ├── train_cards.py
+│   │   └── train_player_sog.py
+│   └── serialization/
+│       └── export_models.py       # Exporta modelos MLflow → ONNX
+├── etl/
+│   ├── statsbomb_loader.py        # StatsBomb JSON → CSV com features HT
+│   ├── data_loader.py             # Lê CSVs gerados
+│   ├── cleaner.py                 # Limpeza e validação
+│   ├── feature_engineer.py        # Derivações (diff, competição)
+│   └── preprocessor.py            # StandardScaler + split 90/10 + parquet
+├── data/
+│   ├── raw/                       # CSVs gerados pelo statsbomb_loader
+│   └── processed/                 # Parquets normalizados (train + holdout)
+├── models/
+│   ├── onnx/                      # Arquivos .onnx + model_manifest.json
+│   └── preprocessors/             # Scalers .pkl para os endpoints /live/*
+├── docs/
+│   ├── Delfos_API.postman_collection.json
+│   ├── architecture.md
+│   ├── api_reference.md
+│   └── pipeline.md
+├── run_pipeline.py                # Roda ETL + treinamento completo
+├── run_api.sh                     # Inicia a API com checagem de dependências
+├── requirements-ml.txt
+└── .env                           # Variáveis de ambiente (não commitado)
 ```
 
-<div align="center">
-  <p>Frontend (React + Vite) rodando em <code>localhost:5173</code></p>
-  <p>Backend (Java + Spring Boot) rodando em <code>localhost:8080</code></p>
-</div>
+---
+
+## Pré-requisitos
+
+- Python 3.11+
+- Java 17+ (para o predictive-service)
+- Token de API da BetsAPI (Bet365)
 
 ---
 
-## 🚀 Começando
-
-Siga estas instruções para rodar o ambiente de desenvolvimento completo na sua máquina local.
-
-### Pré-requisitos
-
-- **Git**
-- **Java 21+**
-- **Docker & Docker Compose**
-- **Node.js 18+ & npm**
-
-### Rodando a Aplicação
-
-O backend e o frontend são executados em sessões de terminal separadas.
-
-#### **Terminal 1: Iniciar o Backend**
+## Instalação
 
 ```bash
-# 1. Clone o repositório
-git clone https://github.com/Macedo-felipe/Melchior.git
+# Clone o repositório
+git clone <url-do-repo>
 cd Melchior
 
-# 2. Configure e rode o serviço de backend usando Make
-# Isso irá verificar os pré-requisitos, construir a imagem Docker e iniciar o container.
-make setup && make run
+# Instale as dependências Python
+pip install -r requirements-ml.txt
+
+# Configure as variáveis de ambiente
+cp .env.example .env
+# Edite o .env e adicione seu BETSAPI_TOKEN
 ```
-> **Nota:** Se você não tiver o `make`, pode rodar `./setup.sh` no lugar.
 
-A API do backend estará disponível em `http://localhost:8080`.
+### Arquivo `.env`
 
-#### **Terminal 2: Iniciar o Frontend**
+```env
+# Predictive Service (Java)
+PREDICTIVE_PORT=8080
+SPRING_PROFILES_ACTIVE=dev
+CORS_ALLOWED_ORIGINS=http://localhost:5173
+
+# Delfos API (Python)
+BETSAPI_TOKEN=seu_token_aqui
+DELFOS_PORT=8000
+DELFOS_HOST=0.0.0.0
+```
+
+---
+
+## Pipeline de treinamento
+
+Execute o pipeline completo (ETL + treinamento + avaliação):
 
 ```bash
-# 1. Navegue para o diretório do frontend
-cd frontend
-
-# 2. Instale as dependências
-npm install
-
-# 3. Inicie o servidor de desenvolvimento
-npm run dev
+python run_pipeline.py
 ```
 
-A aplicação frontend estará disponível em `http://localhost:5173`.
+Ou pule o ETL se os parquets já existem:
+
+```bash
+python run_pipeline.py --skip-etl
+```
+
+Depois exporte os modelos para ONNX:
+
+```bash
+python -m delfos.serialization.export_models
+```
+
+Os artefatos ficam em:
+- `models/onnx/` — arquivos `.onnx` + `model_manifest.json`
+- `models/preprocessors/` — scalers `.pkl`
+- `mlflow.db` — tracking de experimentos (visualize com `mlflow ui --backend-store-uri sqlite:///mlflow.db`)
 
 ---
 
-## 🗺️ Endpoints da API
+## Rodando a API
 
-A API do backend fornece os seguintes endpoints para predições. Todos os endpoints requerem um parâmetro `matchId`.
+```bash
+bash run_api.sh
+```
 
-| Método | Endpoint                   | Descrição                                                 |
-|--------|----------------------------|-----------------------------------------------------------|
-| `GET`  | `/api/v1/predictions/match-outcome` | Retorna probabilidades de vitória, empate e derrota.      |
-| `GET`  | `/api/v1/predictions/team-sog`      | Estima os chutes a gol esperados por time.                |
-| `GET`  | `/api/v1/predictions/total-goals`   | Estima o xG e probabilidades de over/under gols.          |
-| `GET`  | `/api/v1/predictions/btts`          | Probabilidade de ambos os times marcarem (Both Teams to Score). |
-| `GET`  | `/api/v1/predictions/corner-count`  | Total esperado de escanteios e over/under.                |
-| `GET`  | `/api/v1/predictions/player-performance` | Score esperado e probabilidades de gol e assistência de um jogador. |
+O script verifica dependências, valida o manifest ONNX e sobe o uvicorn. Por padrão, a API fica disponível em `http://localhost:8000`.
 
-### Documentação Interativa (Swagger)
-
-Com o backend em execução, a documentação completa da API está disponível em:
-[http://localhost:8080/swagger-ui.html](http://localhost:8080/swagger-ui.html)
+Docs interativos (Swagger UI): `http://localhost:8000/docs`
 
 ---
 
-## 📍 Roadmap
+## Endpoints principais
 
-A implementação atual usa dados "stubados" para o desenvolvimento rápido do frontend. A próxima grande fase envolve a integração de um modelo de Machine Learning real. O plano detalhado para isso está documentado em:
-*   `docs/Proximos Passos.md`
+### Saúde
+
+```
+GET /health
+```
+
+### Predição via BetsAPI (uso principal — jogo ao vivo)
+
+```
+POST /v1/predict/betsapi/total-goals
+POST /v1/predict/betsapi/corners
+POST /v1/predict/betsapi/cards
+POST /v1/predict/betsapi/match-outcome   ← pendente
+```
+
+Body:
+```json
+{
+  "fi": "12345678",
+  "competition_type": "Domestic League"
+}
+```
+
+Como obter o `fi` de um jogo ao vivo:
+```
+GET https://api.b365api.com/v1/bet365/inplay?token=SEU_TOKEN
+```
+Procure `sport_id=1` (futebol) e copie o campo `fi` do evento desejado.
+
+### Predição histórica (para testes)
+
+```
+POST /v1/predict/total-goals   {"match_id": "3829431"}
+POST /v1/predict/corners       {"match_id": "3829431"}
+POST /v1/predict/cards         {"match_id": "3829431"}
+```
+
+### Predição com features manuais
+
+```
+POST /v1/predict/live/total-goals
+POST /v1/predict/live/corners
+POST /v1/predict/live/cards
+```
+
+Body (estatísticas acumuladas do 1º tempo):
+```json
+{
+  "competition_type": "Domestic League",
+  "ht_goals_home": 1,
+  "ht_goals_away": 0,
+  "ht_shots_home": 6,
+  "ht_shots_away": 3,
+  "ht_sog_home": 3,
+  "ht_sog_away": 1,
+  "ht_fouls_home": 5,
+  "ht_fouls_away": 7,
+  "ht_corners_home": 4,
+  "ht_corners_away": 2,
+  "ht_yellow_cards_home": 1,
+  "ht_yellow_cards_away": 2
+}
+```
 
 ---
 
-## 🤝 Contribuições
+## Respostas de exemplo
 
-Contribuições são o que tornam a comunidade de código aberto um lugar incrível para aprender, inspirar e criar. Qualquer contribuição que você fizer será **muito apreciada**.
+**Total de gols:**
+```json
+{
+  "expected_goals": 2.45,
+  "over_25_probability": 0.44,
+  "under_25_probability": 0.56,
+  "most_likely_range": "2-3",
+  "confidence_score": 0.56,
+  "model_version": "1.0.0",
+  "generated_at": "2026-03-28T09:26:54Z"
+}
+```
 
-Se você tiver uma sugestão para melhorar este projeto, por favor, faça um fork do repositório e crie um pull request. Você também pode simplesmente abrir uma issue com a tag "enhancement".
-
-1.  Faça um Fork do projeto
-2.  Crie sua Feature Branch (`git checkout -b feature/AmazingFeature`)
-3.  Commit suas mudanças (`git commit -m 'Add some AmazingFeature'`)
-4.  Push para a Branch (`git push origin feature/AmazingFeature`)
-5.  Abra um Pull Request
+**Cartões:**
+```json
+{
+  "expected_yellow_cards": 4.90,
+  "expected_red_cards": 0.09,
+  "over_3_yellow_probability": 0.68,
+  "under_3_yellow_probability": 0.32,
+  "confidence_score": 0.68,
+  "model_version": "1.0.0",
+  "generated_at": "2026-03-28T09:26:54Z"
+}
+```
 
 ---
 
-## 📄 Licença
+## Códigos HTTP
 
-Distribuído sob a licença MIT. Veja `LICENSE` para mais informações.
+| Código | Significado |
+|---|---|
+| 200 | Predição realizada com sucesso |
+| 400 | match_id não numérico |
+| 404 | match_id ou fi não encontrado |
+| 422 | Jogo fora da janela HT (2º tempo ou encerrado) |
+| 503 | Modelo não carregado ou BetsAPI indisponível |
 
 ---
 
-<p align="center">
-  Feito com ❤️ por Francisco Macedo
-</p>
+## Documentação técnica
+
+| Documento | Descrição |
+|---|---|
+| [docs/architecture.md](docs/architecture.md) | Arquitetura do sistema e fluxo de dados |
+| [docs/api_reference.md](docs/api_reference.md) | Referência completa de todos os endpoints |
+| [docs/pipeline.md](docs/pipeline.md) | Pipeline ETL e treinamento dos modelos |
+| [docs/Delfos_API.postman_collection.json](docs/Delfos_API.postman_collection.json) | Collection Postman para testes |
+
+---
+
+## Limitações conhecidas
+
+- **match_outcome** retorna HTTP 503: o modelo XGBClassifier não pôde ser exportado para ONNX por incompatibilidade entre XGBoost 3.2 e onnxmltools 1.16 (nós de split binário sem `split_condition` no dump JSON). Correção: retreinar com GradientBoostingClassifier do scikit-learn.
+- Os modelos foram treinados com dados do StatsBomb Open Data, que cobre principalmente ligas europeias de elite. Partidas de ligas menores podem ter menor precisão.
+- O token da BetsAPI precisa ter permissão para o endpoint `/v1/bet365/inplay_stats`.
